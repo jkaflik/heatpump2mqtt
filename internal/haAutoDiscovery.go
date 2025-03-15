@@ -41,14 +41,14 @@ type mqttSelect struct {
 }
 
 type mqttNumber struct {
-	Name              string `json:"name,omitempty"`
-	CommandTopic      string `json:"command_topic,omitempty"`
-	StateTopic        string `json:"state_topic,omitempty"`
-	AvailabilityTopic string `json:"availability_topic,omitempty"`
-	Min               int    `json:"min,omitempty"`
-	Max               int    `json:"max,omitempty"`
-	Step              int    `json:"step,omitempty"`
-	UniqueID          string `json:"unique_id,omitempty"`
+	Name              string  `json:"name,omitempty"`
+	CommandTopic      string  `json:"command_topic,omitempty"`
+	StateTopic        string  `json:"state_topic,omitempty"`
+	AvailabilityTopic string  `json:"availability_topic,omitempty"`
+	Min               float64 `json:"min,omitempty"`
+	Max               float64 `json:"max,omitempty"`
+	Step              float64 `json:"step,omitempty"`
+	UniqueID          string  `json:"unique_id,omitempty"`
 	Device            struct {
 		Manufacturer string `json:"manufacturer,omitempty"`
 		Model        string `json:"model,omitempty"`
@@ -60,13 +60,14 @@ type mqttNumber struct {
 type mqttSensor struct {
 	Name              string `json:"name,omitempty"`
 	StateTopic        string `json:"state_topic"`
-	StateClass        string `json:"state_class"`
+	StateClass        string `json:"state_class,omitempty"`
 	AvailabilityTopic string `json:"availability_topic,omitempty"`
 	UnitOfMeasurement string `json:"unit_of_measurement,omitempty"`
 	DeviceClass       string `json:"device_class,omitempty"`
 	ForceUpdate       bool   `json:"force_update,omitempty"`
 	ExpireAfter       int    `json:"expire_after,omitempty"`
 	UniqueID          string `json:"unique_id,omitempty"`
+	ValueTemplate     string `json:"value_template,omitempty"`
 	Device            struct {
 		Manufacturer string `json:"manufacturer,omitempty"`
 		Model        string `json:"model,omitempty"`
@@ -115,7 +116,6 @@ func encodeSensor(sensorName, deviceID, unit, stateClass string) (topic string, 
 	var s mqttSensor
 	s.Name = strings.ReplaceAll(sensorName, "_", " ")
 	s.StateTopic = getStatusTopic(sensorName)
-	s.StateClass = stateClass
 	s.AvailabilityTopic = Config.mqttWillTopic
 	s.UnitOfMeasurement = unit
 	s.DeviceClass = getDeviceClass(unit)
@@ -125,7 +125,17 @@ func encodeSensor(sensorName, deviceID, unit, stateClass string) (topic string, 
 	s.Device.Identifiers = deviceID
 	s.Device.Name = "Aquarea " + deviceID
 
-	topic = fmt.Sprintf("homeassistant/sensor/%s/%s/Config", deviceID, sensorName)
+	// Only apply state_class for numeric sensors (ones with units)
+	if unit != "" && unit != "ErrorState" {
+		s.StateClass = stateClass
+	}
+
+	// Add value template for text-based sensors
+	if sensorName == "ThreeWay_Valve_State" || sensorName == "Error" || sensorName == "Heat_Pump_Model" {
+		s.ValueTemplate = "{{ value }}"
+	}
+
+	topic = fmt.Sprintf("homeassistant/sensor/%s/%s/config", deviceID, sensorName)
 	data, err = json.Marshal(s)
 
 	return topic, data, err
@@ -144,7 +154,7 @@ func encodeBinarySensor(sensorName, deviceID, payloadOn, payloadOff string) (top
 	s.Device.Identifiers = deviceID
 	s.Device.Name = "Aquarea " + deviceID
 
-	topic = fmt.Sprintf("homeassistant/binary_sensor/%s/%s/Config", deviceID, sensorName)
+	topic = fmt.Sprintf("homeassistant/binary_sensor/%s/%s/config", deviceID, sensorName)
 	data, err = json.Marshal(s)
 
 	return topic, data, err
@@ -164,7 +174,7 @@ func encodeSwitch(sensorName, deviceID string, values []string) (topic string, d
 	b.Device.Identifiers = deviceID
 	b.Device.Name = "Aquarea " + deviceID
 
-	topic = fmt.Sprintf("homeassistant/switch/%s/%s/Config", deviceID, sensorName)
+	topic = fmt.Sprintf("homeassistant/switch/%s/%s/config", deviceID, sensorName)
 	data, err = json.Marshal(b)
 
 	return topic, data, err
@@ -183,7 +193,7 @@ func encodeSelect(sensorName, deviceID string, values []string) (topic string, d
 	b.Device.Identifiers = deviceID
 	b.Device.Name = "Aquarea " + deviceID
 
-	topic = fmt.Sprintf("homeassistant/select/%s/%s/Config", deviceID, sensorName)
+	topic = fmt.Sprintf("homeassistant/select/%s/%s/config", deviceID, sensorName)
 	data, err = json.Marshal(b)
 
 	return topic, data, err
@@ -195,16 +205,16 @@ func encodeNumber(sensorName, deviceID string, min, max, step int) (topic string
 	s.StateTopic = getStatusTopic(sensorName)
 	s.CommandTopic = s.StateTopic + "/set"
 	s.AvailabilityTopic = Config.mqttWillTopic
-	s.Min = min
-	s.Max = max
-	s.Step = step
+	s.Min = float64(min)
+	s.Max = float64(max)
+	s.Step = float64(step)
 	s.UniqueID = deviceID + "_" + sensorName
 	s.Device.Manufacturer = "Panasonic"
 	s.Device.Model = "Aquarea"
 	s.Device.Identifiers = deviceID
 	s.Device.Name = "Aquarea " + deviceID
 
-	topic = fmt.Sprintf("homeassistant/number/%s/%s/Config", deviceID, sensorName)
+	topic = fmt.Sprintf("homeassistant/number/%s/%s/config", deviceID, sensorName)
 	data, err = json.Marshal(s)
 
 	return topic, data, err

@@ -152,6 +152,20 @@ func convertIntToEnum(value int, topic topicData) string {
 	return fmt.Sprintf("%d", value)
 }
 
+// isNumericValueInRange checks if a numeric value is within the defined min/max range
+func isNumericValueInRange(value string, minValue, maxValue int) (bool, float64) {
+	// Try to parse as float
+	var numericValue float64
+	_, err := fmt.Sscanf(value, "%f", &numericValue)
+	if err != nil {
+		// If it can't be parsed as a number, it's a string value (like "Room" or "No error")
+		return true, 0 // Consider strings as valid
+	}
+
+	// Check if value is within range
+	return numericValue >= float64(minValue) && numericValue <= float64(maxValue), numericValue
+}
+
 func decodeHeatpumpData(data []byte, mclient mqtt.Client) {
 	for k, v := range allTopics {
 		var topicValue string
@@ -164,7 +178,18 @@ func decodeHeatpumpData(data []byte, mclient mqtt.Client) {
 			log.Println("Unknown codec function: ", v.DecodeFunction)
 		}
 
+		// Only update if the value has changed
 		if v.currentValue != topicValue {
+			// For numeric sensors with defined ranges, validate the value is in range
+			if v.Min != 0 || v.Max != 0 {
+				inRange, numValue := isNumericValueInRange(topicValue, v.Min, v.Max)
+				if !inRange {
+					log.Printf("WARNING: Value %v for sensor %s is outside the allowed range (%d to %d). Skipping update.",
+						numValue, v.SensorName, v.Min, v.Max)
+					continue // Skip updating this value
+				}
+			}
+
 			v.currentValue = topicValue
 			allTopics[k] = v
 			mqttPublish(mclient, getStatusTopic(v.SensorName), topicValue, 0)

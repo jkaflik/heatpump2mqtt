@@ -190,10 +190,6 @@
   encodeFunction: setIntPlus128
   decodeOffset: 39
   displayUnit: °C
-# No thermostat
-#   min: -5
-#   max: 5
-# With thermostat
   min: 18
   max: 35
   step: 1
@@ -226,7 +222,7 @@
   encodeFunction: setIntPlus128
   decodeOffset: 77
   displayUnit: °C
-  min: -15
+  min: -20
   max: 15
   step: 1
 - sensorName: Room_Thermostat_Temp
@@ -258,8 +254,8 @@
 # With thermostat
 # min: 18
 # max: 35
-  min: 5
-  max: -5
+  min: -5
+  max: 5
   step: 1
 - sensorName: Z1_Water_Temp
   decodeFunction: getIntMinus128
@@ -289,12 +285,12 @@
   decodeFunction: getIntMinus128
   decodeOffset: 147
   displayUnit: °C
-  stateClass: total
+  stateClass: measurement
 - sensorName: Z2_Water_Target_Temp
   decodeFunction: getIntMinus128
   decodeOffset: 148
   displayUnit: °C
-  stateClass: total
+  stateClass: measurement
 - sensorName: Error
   decodeFunction: getErrorInfo
   displayUnit: ErrorState
@@ -502,7 +498,7 @@
   decodeOffset: 96
   displayUnit: °C
   min: 5
-  max: 14
+  max: 24
   step: 1
 - sensorName: Cooling_Mode
   decodeFunction: getBit5and6
