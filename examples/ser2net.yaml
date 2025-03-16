@@ -1,0 +1,13 @@
+%YAML 1.1
+---
+connection: &panasonic
+  accepter: tcp,8899
+  enable: on
+  options:
+    kickolduser: true
+    dev-to-net-bufsize: 1200
+    net-to-dev-bufsize: 1200
+    trace-both: /tmp/ser2net.log
+    trace-hexdump: true
+    trace-timestamp: true
+  connector: serialdev,/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_AH05W9XY-if00-port0,9600n81,rs485=0:0:rts_on_send

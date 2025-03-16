@@ -1,76 +1,85 @@
+version: 2
 project_name: heatpump2mqtt
-
 before:
   hooks:
     - go mod tidy
-    - go test ./...
+
 builds:
-  - main: ./cmd/heatpump2mqtt
+  - id: heatpump2mqtt
+    main: ./cmd/heatpump2mqtt
+    binary: heatpump2mqtt
     env:
       - CGO_ENABLED=0
     goos:
       - linux
+      - darwin
     goarch:
       - amd64
-      - 386
-      - arm
       - arm64
-    goarm:
-      - 7
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+# Docker images configuration
+dockers:
+  - id: heatpump2mqtt-amd64
+    goos: linux
+    goarch: amd64
+    ids:
+      - heatpump2mqtt
+    image_templates:
+      - ghcr.io/jkaflik/heatpump2mqtt:{{ .Version }}-amd64
+      - ghcr.io/jkaflik/heatpump2mqtt:latest-amd64
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - --platform=linux/amd64
+      - --label=org.opencontainers.image.created={{.Date}}
+      - --label=org.opencontainers.image.title={{.ProjectName}}
+      - --label=org.opencontainers.image.revision={{.FullCommit}}
+      - --label=org.opencontainers.image.version={{.Version}}
+      - --label=org.opencontainers.image.source={{.GitURL}}
+
+  - id: heatpump2mqtt-arm64
+    goos: linux
+    goarch: arm64
+    ids:
+      - heatpump2mqtt
+    image_templates:
+      - ghcr.io/jkaflik/heatpump2mqtt:{{ .Version }}-arm64
+      - ghcr.io/jkaflik/heatpump2mqtt:latest-arm64
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - --platform=linux/arm64
+      - --label=org.opencontainers.image.created={{.Date}}
+      - --label=org.opencontainers.image.title={{.ProjectName}}
+      - --label=org.opencontainers.image.revision={{.FullCommit}}
+      - --label=org.opencontainers.image.version={{.Version}}
+      - --label=org.opencontainers.image.source={{.GitURL}}
+
+# Multi-platform Docker manifest
+docker_manifests:
+  - name_template: ghcr.io/jkaflik/heatpump2mqtt:{{ .Version }}
+    image_templates:
+      - ghcr.io/jkaflik/heatpump2mqtt:{{ .Version }}-amd64
+      - ghcr.io/jkaflik/heatpump2mqtt:{{ .Version }}-arm64
+
+  - name_template: ghcr.io/jkaflik/heatpump2mqtt:latest
+    image_templates:
+      - ghcr.io/jkaflik/heatpump2mqtt:latest-amd64
+      - ghcr.io/jkaflik/heatpump2mqtt:latest-arm64
 
 archives:
-  - name_template: "{{ .ProjectName }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
-    replacements:
-      darwin: Darwin
-      linux: Linux
-      386: i386
-      amd64: x86_64
-    files:
-      - none*
+  - files:
+      - README.md
+      - LICENSE*
 
-checksum:
-  name_template: 'checksums.txt'
-
-dockers:
-  - image_templates:
-      - ghcr.io/jkaflik/{{.ProjectName}}:v{{ .Version }}-amd64
-    use: buildx
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--platform=linux/amd64"
-    extra_files:
-      - topics.yaml
-
-  - image_templates:
-      - ghcr.io/jkaflik/{{.ProjectName}}:v{{ .Version }}-arm7
-    use: buildx
-    dockerfile: Dockerfile
-    goarch: arm
-    goarm: 7
-    build_flag_templates:
-      - "--platform=linux/arm/v7"
-    extra_files:
-      - topics.yaml
-
-  - image_templates:
-      - ghcr.io/jkaflik/{{.ProjectName}}:v{{ .Version }}-arm64
-    use: buildx
-    dockerfile: Dockerfile
-    goarch: arm64
-    build_flag_templates:
-      - "--platform=linux/arm64/v8"
-    extra_files:
-      - topics.yaml
-
-docker_manifests:
-  # github
-  - name_template: ghcr.io/jkaflik/{{.ProjectName}}:v{{ .Version }}
-    image_templates:
-      - ghcr.io/jkaflik/{{.ProjectName}}:v{{ .Version }}-amd64
-      - ghcr.io/jkaflik/{{.ProjectName}}:v{{ .Version }}-arm64
-      - ghcr.io/jkaflik/{{.ProjectName}}:v{{ .Version }}-arm7
-  - name_template: ghcr.io/jkaflik/{{.ProjectName}}:latest
-    image_templates:
-      - ghcr.io/jkaflik/{{.ProjectName}}:v{{ .Version }}-amd64
-      - ghcr.io/jkaflik/{{.ProjectName}}:v{{ .Version }}-arm64
-      - ghcr.io/jkaflik/{{.ProjectName}}:v{{ .Version }}-arm7
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - Merge pull request
+      - Merge branch

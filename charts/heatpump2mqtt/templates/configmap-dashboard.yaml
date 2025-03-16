@@ -1,0 +1,18 @@
+{{- if .Values.dashboards.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hass2ch.fullname" . }}-dashboard
+  labels:
+    {{- include "hass2ch.labels" . | nindent 4 }}
+    grafana_dashboard: "true"
+  {{- with .Values.dashboards.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  hass2ch-dashboard.json: |-
+{{ .Files.Get "dashboards/hass2ch-dashboard.json" | indent 4 }}
+  hass2ch-retry-dashboard.json: |-
+{{ .Files.Get "dashboards/hass2ch-retry-dashboard.json" | indent 4 }}
+{{- end }}

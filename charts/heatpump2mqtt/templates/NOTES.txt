@@ -1,0 +1,31 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }}.
+
+{{- if eq .Values.secret.mode "create" }}
+A Secret with the name '{{ include "hass2ch.fullname" . }}' has been created for your credentials.
+{{- else if eq .Values.secret.mode "existing" }}
+Using existing Secret '{{ .Values.secret.existingSecretName }}' for credentials.
+{{- end }}
+
+The Home Assistant to ClickHouse data pipeline is now running.
+
+{{- if .Values.metrics.enabled }}
+
+To view the metrics:
+
+  kubectl port-forward svc/{{ include "hass2ch.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+
+Then open:
+  http://localhost:{{ .Values.service.port }}/metrics
+
+{{- if .Values.metrics.serviceMonitor.enabled }}
+The ServiceMonitor for Prometheus has been configured. Your Prometheus instance should automatically discover and scrape metrics from this service.
+{{- else }}
+The service has Prometheus annotations and can be discovered by Prometheus. If you want to enable a ServiceMonitor, set .Values.metrics.serviceMonitor.enabled=true
+{{- end }}
+{{- end }}
+
+For troubleshooting, check the logs:
+
+  kubectl logs -f deployment/{{ include "hass2ch.fullname" . }} -n {{ .Release.Namespace }}

@@ -1,34 +1,24 @@
 package internal
 
 import (
-	"io"
-	"log"
-
+	"fmt"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
-type mLogger struct {
-	mclient mqtt.Client
+// MQTTLogWriter is a writer that sends logs to MQTT
+type MQTTLogWriter struct {
+	client mqtt.Client
+	topic  string
 }
 
-var logger mLogger
+// Write implements the io.Writer interface to enable MQTT logging
+func (m *MQTTLogWriter) Write(p []byte) (n int, err error) {
+	if m.client == nil || !m.client.IsConnected() {
+		return 0, fmt.Errorf("MQTT client not connected")
+	}
 
-func (m mLogger) Write(p []byte) (n int, err error) {
-	mqttPublish(m.mclient, Config.mqttLogTopic, p, 0)
+	// Extract and format the log entry for MQTT
+	msg := string(p)
+	mqttPublish(m.client, m.topic, msg, 0)
 	return len(p), nil
-}
-
-func LogHex(name string, command []byte) {
-	if Config.LogHexDump {
-		log.Printf("%s: %X\n", name, command)
-	}
-}
-
-func RedirectLog(mclient mqtt.Client) {
-	logger.mclient = mclient
-
-	if Config.LogMqtt {
-		log.Println("Enabling logging to MQTT")
-		log.SetOutput(io.MultiWriter(logger, log.Writer()))
-	}
 }

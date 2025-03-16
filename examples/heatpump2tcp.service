@@ -1,0 +1,39 @@
+[Unit]
+Description=Serial to TCP bridge for Panasonic Heat Pump
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+User=root
+# Panasonic heat pump requires 9600 baud, even parity, 8 data bits, 1 stop bit
+# -d -d enables debug output for more verbose logging
+# TCP-LISTEN options:
+#   reuseaddr - allows quick restart of the service without waiting for timeout
+#   fork - handles multiple connections
+#   keepalive - maintains persistent connections
+# FILE options:
+#   b9600 - baud rate 9600
+#   cs8 - 8 data bits
+#   parenb - enable parity
+#   parodd=0 - use even parity (not odd)
+#   cstopb=0 - 1 stop bit (not 2)
+#   raw - standard processing mode (better than rawer for this application)
+#   clocal=1 - ignore modem control lines
+#   crtscts=0 - disable hardware flow control
+#   icanon=0 - disable canonical mode
+ExecStart=/usr/bin/socat -d -d \
+  TCP-LISTEN:8899,reuseaddr,keepalive,nodelay,fork \
+  OPEN:/dev/ttyUSB0,b9600,cs8,parenb=1,parodd=0,cstopb=0,raw,clocal=1,crtscts=0,icanon=0,echo=0,igncr=0,icrnl=0
+
+# Give the service time to properly shut down the serial connection
+TimeoutStopSec=10
+# Keep logs and limit memory usage
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

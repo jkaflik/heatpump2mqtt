@@ -1,0 +1,14 @@
+apiVersion: v2
+name: hass2ch
+description: A Helm chart for hass2ch
+type: application
+version: 0.1.0
+appVersion: latest
+keywords:
+  - home-assistant
+  - clickhouse
+  - iot
+  - data-pipeline
+maintainers:
+  - name: Jakub Kaflik
+    email: jakub@kaflik.tech

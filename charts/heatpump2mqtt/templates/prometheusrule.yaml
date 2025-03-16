@@ -1,0 +1,122 @@
+{{- if and .Values.metrics.enabled .Values.metrics.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "hass2ch.fullname" . }}
+  {{- if .Values.metrics.prometheusRule.namespace }}
+  namespace: {{ .Values.metrics.prometheusRule.namespace }}
+  {{- end }}
+  labels:
+    {{- include "hass2ch.labels" . | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+  - name: hass2ch.rules
+    rules:
+    # Availability alerts
+    - alert: hass2chPodNotRunning
+      expr: sum(kube_pod_container_status_running{container="{{ .Chart.Name }}"}) < {{ .Values.replicaCount }}
+      for: 5m
+      labels:
+        severity: critical
+        component: hass2ch
+      annotations:
+        summary: "hass2ch pod not running"
+        description: "hass2ch pod has not been running for 5 minutes."
+
+    - alert: hass2chConnectionDown
+      expr: hass2ch_hass_connection_status == 0 or hass2ch_clickhouse_connection_status == 0
+      for: 5m
+      labels:
+        severity: critical
+        component: hass2ch
+      annotations:
+        summary: "hass2ch connection is down"
+        description: "{{ "{{" }} $labels.instance {{ "}}" }}: Connection to {{ "{{" }} $labels.connection_type {{ "}}" }} has been down for 5 minutes."
+
+    # Data flow alerts
+    - alert: hass2chNoEventsReceived
+      expr: rate(hass2ch_events_received_total[30m]) == 0
+      for: 30m
+      labels:
+        severity: warning
+        component: hass2ch
+      annotations:
+        summary: "hass2ch not receiving events"
+        description: "hass2ch has not received any events in the last 30 minutes."
+
+    - alert: hass2chHighEventFilterRate
+      expr: rate(hass2ch_events_filtered_total[5m]) / rate(hass2ch_events_received_total[5m]) > 0.5
+      for: 15m
+      labels:
+        severity: warning
+        component: hass2ch
+      annotations:
+        summary: "hass2ch has high event filter rate"
+        description: "More than 50% of events are being filtered out for the last 15 minutes."
+
+    # Performance alerts
+    - alert: hass2chSlowBatchProcessing
+      expr: histogram_quantile(0.95, rate(hass2ch_batch_processing_duration_seconds_bucket[5m])) > 5
+      for: 15m
+      labels:
+        severity: warning
+        component: hass2ch
+      annotations:
+        summary: "hass2ch batch processing is slow"
+        description: "95th percentile of batch processing time is over 5 seconds for the last 15 minutes."
+
+    # Database operation alerts
+    - alert: hass2chDatabaseErrors
+      expr: rate(hass2ch_database_operations_total{status="error"}[5m]) > 0
+      for: 15m
+      labels:
+        severity: warning
+        component: hass2ch
+      annotations:
+        summary: "hass2ch database errors"
+        description: "Database operation errors have been occurring for the last 15 minutes. Operation type: {{ "{{" }} $labels.operation {{ "}}" }}."
+        
+    - alert: hass2chHighRetryRate
+      expr: rate(hass2ch_clickhouse_retry_attempts_total[5m]) > 1
+      for: 15m
+      labels:
+        severity: warning
+        component: hass2ch
+      annotations:
+        summary: "hass2ch has high retry rate"
+        description: "More than 1 retry per second on average during the last 15 minutes. This may indicate connectivity issues with ClickHouse."
+
+    - alert: hass2chSlowDatabaseQueries
+      expr: histogram_quantile(0.95, rate(hass2ch_clickhouse_query_duration_seconds_bucket{query_type="insert"}[5m])) > 10
+      for: 15m
+      labels:
+        severity: warning
+        component: hass2ch
+      annotations:
+        summary: "hass2ch database queries are slow"
+        description: "95th percentile of insert operation time is over 10 seconds for the last 15 minutes."
+
+    # Resource utilization alerts
+    - alert: hass2chHighCPUUsage
+      expr: sum(rate(container_cpu_usage_seconds_total{container="{{ .Chart.Name }}"}[5m])) / sum(kube_pod_container_resource_limits{container="{{ .Chart.Name }}", resource="cpu"}) > 0.8
+      for: 15m
+      labels:
+        severity: warning
+        component: hass2ch
+      annotations:
+        summary: "hass2ch high CPU usage"
+        description: "hass2ch is using more than 80% of its CPU limit for the last 15 minutes."
+
+    - alert: hass2chHighMemoryUsage
+      expr: sum(container_memory_working_set_bytes{container="{{ .Chart.Name }}"}) / sum(kube_pod_container_resource_limits{container="{{ .Chart.Name }}", resource="memory"}) > 0.8
+      for: 15m
+      labels:
+        severity: warning
+        component: hass2ch
+      annotations:
+        summary: "hass2ch high memory usage"
+        description: "hass2ch is using more than 80% of its memory limit for the last 15 minutes."
+{{- end }}

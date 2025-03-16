@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hass2ch.fullname" . }}
+  labels:
+    {{- include "hass2ch.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "hass2ch.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "hass2ch.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "hass2ch.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --log-level={{ .Values.config.logLevel }}
+            - --host={{ .Values.homeAssistant.host }}
+            {{- if .Values.homeAssistant.secure }}
+            - --secure
+            {{- end }}
+            - --clickhouse-url={{ .Values.clickhouse.url }}
+            - --clickhouse-database={{ .Values.clickhouse.database }}
+            - --clickhouse-username={{ .Values.clickhouse.username }}
+            {{- if .Values.clickhouse.password }}
+            - --clickhouse-password={{ .Values.clickhouse.password }}
+            {{- end }}
+            {{- if .Values.metrics.enabled }}
+            - "--metrics-addr=:{{ .Values.metrics.service.port }}"
+            - --enable-metrics
+            {{- else }}
+            - --enable-metrics=false
+            {{- end }}
+            # ClickHouse retry settings
+            - --clickhouse-max-retries={{ .Values.config.clickhouse.maxRetries }}
+            - --clickhouse-initial-interval={{ .Values.config.clickhouse.initialInterval }}
+            - --clickhouse-max-interval={{ .Values.config.clickhouse.maxInterval }}
+            - --clickhouse-timeout={{ .Values.config.clickhouse.timeout }}
+            - pipeline
+          env:
+            - name: HASS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  {{- if eq .Values.secret.mode "existing" }}
+                  name: {{ .Values.secret.existingSecretName }}
+                  {{- else }}
+                  name: {{ include "hass2ch.fullname" . }}
+                  {{- end }}
+                  key: {{ .Values.secret.hassTokenKey }}
+            {{- if not .Values.clickhouse.password }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if eq .Values.secret.mode "existing" }}
+                  name: {{ .Values.secret.existingSecretName }}
+                  {{- else }}
+                  name: {{ include "hass2ch.fullname" . }}
+                  {{- end }}
+                  key: {{ .Values.secret.clickhousePasswordKey }}
+            {{- end }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

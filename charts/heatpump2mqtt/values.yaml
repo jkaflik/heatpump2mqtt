@@ -1,0 +1,113 @@
+# Default values for hass2ch
+# This is a YAML-formatted file.
+
+image:
+  repository: ghcr.io/jkaflik/hass2ch
+  pullPolicy: IfNotPresent
+  tag: ""  # Defaults to .Chart.AppVersion if not set
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Home Assistant configuration
+homeAssistant:
+  host: "homeassistant.local"
+  secure: false
+  # Token can be specified directly or via external secrets
+  token: ""
+
+# ClickHouse configuration
+clickhouse:
+  url: "http://clickhouse:8123"
+  database: "hass"
+  username: "default"
+  password: ""
+
+# Secret configuration
+secret:
+  # Options: "create" or "existing"
+  # - create: Create a new Secret using values provided in this chart
+  # - existing: Use an existing Secret created outside this chart
+  mode: "create"
+  
+  # Used when mode is "existing"
+  existingSecretName: ""
+  
+  # Key names within the Secret
+  hassTokenKey: "hass-token"
+  clickhousePasswordKey: "clickhouse-password"
+
+# Application configuration
+config:
+  logLevel: "info"
+  metricsEnabled: true
+  
+  # ClickHouse retry settings
+  clickhouse:
+    maxRetries: 5
+    initialInterval: "500ms"
+    maxInterval: "30s"
+    timeout: "60s"
+
+# Metrics and monitoring
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: "30s"
+    scrapeTimeout: "10s"
+    labels: {}
+  prometheusRule:
+    enabled: false
+    namespace: ""
+    additionalLabels:
+      prometheus: kube-prometheus
+  service:
+    port: 9090
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9090"
+
+# Grafana dashboards
+dashboards:
+  enabled: false
+  annotations:
+    # For sidecar label injection
+    grafana_folder: "Home Assistant"
+    # For direct import in Grafana >= 9.0
+    grafana.com/dashboardNameTemplate: "hass2ch"
+    grafana.com/folderNameTemplate: "Home Assistant"
+
+# Pod resources
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Pod scheduling
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Security context
+podSecurityContext: {}
+securityContext: {}
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 9090
+
+# Pod annotations
+podAnnotations: {}
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""

@@ -1,0 +1,30 @@
+# Heat pump device configuration
+deviceName: "B121679621"               # Identifier for Home Assistant discovery
+device: "/dev/ttyUSB0"                 # Serial port or TCP address (e.g. "192.168.1.100:8899")
+connectionType: "serial"               # Connection type: "serial" or "tcp"
+readInterval: 10                       # Seconds between heat pump queries
+listenOnly: false                      # If true, won't send any commands
+optionalPCB: false                     # Enable optional PCB emulation
+enableOSCommand: true                  # Enable OS command execution via MQTT
+
+# MQTT broker settings
+mqttServer: "127.0.0.1"                # MQTT broker hostname or IP
+mqttPort: "1883"                       # MQTT broker port
+mqttLogin: ""                          # MQTT username (leave empty for no auth)
+mqttPass: ""                           # MQTT password (leave empty for no auth)
+mqttKeepalive: 60                      # MQTT keepalive interval in seconds
+mqttTopicBase: "panasonic_heat_pump"   # Base topic for all MQTT messages
+haAutoDiscover: true                   # Enable Home Assistant MQTT discovery
+
+# Logging configuration
+logLevel: "info"                       # Log level: trace, debug, info, warn, error
+
+# Example configurations:
+# 
+# Serial connection:
+# device: "/dev/ttyUSB0"
+# connectionType: "serial"
+#
+# TCP connection (when using socat or ser2net):
+# device: "192.168.1.100:8899"
+# connectionType: "tcp"

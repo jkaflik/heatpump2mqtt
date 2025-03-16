@@ -1,20 +1,25 @@
 package internal
 
 import (
-	"io/ioutil"
-	"log"
+	"fmt"
+	"os"
 
-	"gopkg.in/yaml.v2"
+	"github.com/rs/zerolog/log"
+	"gopkg.in/yaml.v3"
 )
 
-var allTopics []topicData
-var topicNameLookup map[string]topicData
+// Global topic data
+var (
+	allTopics       []topicData
+	topicNameLookup map[string]topicData
+)
 
+// topicData represents a heat pump topic configuration
 type topicData struct {
-	SensorName     string   `yaml:"sensorName"`
-	DecodeFunction string   `yaml:"decodeFunction"`
+	SensorName     string   `yaml:"sensorName" validate:"required"`
+	DecodeFunction string   `yaml:"decodeFunction" validate:"required"`
 	EncodeFunction string   `yaml:"encodeFunction"`
-	DecodeOffset   int      `yaml:"decodeOffset"`
+	DecodeOffset   int      `yaml:"decodeOffset" validate:"required"`
 	DisplayUnit    string   `yaml:"displayUnit"`
 	Values         []string `yaml:"values"`
 	Min            int      `yaml:"min"`
@@ -24,21 +29,48 @@ type topicData struct {
 	currentValue   string
 }
 
-func LoadTopics(topicFile string) {
-	log.Print("Loading topic data...")
-	data, err := ioutil.ReadFile(topicFile)
+// LoadTopics loads and parses the topic definition file
+func LoadTopics(topicFile string) error {
+	log.Info().Str("file", topicFile).Msg("Loading topic definitions")
+
+	// Read the file
+	data, err := os.ReadFile(topicFile)
 	if err != nil {
-		LogErrorPause(err)
+		return fmt.Errorf("failed to read topics file: %w", err)
 	}
 
+	// Parse the YAML
 	err = yaml.Unmarshal(data, &allTopics)
 	if err != nil {
-		LogErrorPause(err)
+		return fmt.Errorf("failed to parse topics file: %w", err)
 	}
 
-	topicNameLookup = make(map[string]topicData)
+	// Build the lookup map
+	topicNameLookup = make(map[string]topicData, len(allTopics))
 	for _, val := range allTopics {
+		// Validate topic data
+		if val.SensorName == "" {
+			log.Warn().Interface("topic", val).Msg("Topic missing sensor name, skipping")
+			continue
+		}
+
+		// Check for min/max consistency for numeric values
+		if val.Min != 0 || val.Max != 0 {
+			if val.Min >= val.Max {
+				log.Warn().
+					Str("sensor", val.SensorName).
+					Int("min", val.Min).
+					Int("max", val.Max).
+					Msg("Topic has invalid min/max range (min >= max), please check configuration")
+			}
+		}
+
 		topicNameLookup[val.SensorName] = val
 	}
-	log.Println(" loaded.")
+
+	log.Info().
+		Int("topicCount", len(allTopics)).
+		Msg("Topic definitions loaded successfully")
+
+	return nil
 }

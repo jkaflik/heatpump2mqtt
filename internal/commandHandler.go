@@ -1,47 +1,74 @@
 package internal
 
 import (
-	"errors"
 	"fmt"
-	"log"
-	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/rs/zerolog/log"
 )
 
-func onGenericCommand(mclient mqtt.Client, msg mqtt.Message) {
+// onGenericCommand handles generic MQTT commands
+func onGenericCommand(_ mqtt.Client, msg mqtt.Message) {
 	topicPieces := strings.Split(msg.Topic(), "/")
 	function := topicPieces[len(topicPieces)-1]
 	value := string(msg.Payload())
-	log.Printf("Command received - set %s to %s\n", function, value)
 
-	if function == "OSCommand" {
-		handleOSCommand(mclient, msg)
-	} else if Config.OptionalPCB {
+	log.Info().
+		Str("function", function).
+		Str("value", value).
+		Str("topic", msg.Topic()).
+		Msg("Command received")
+
+	switch {
+	case Config.OptionalPCB:
 		handlePCBCommand(function, value)
-	} else {
-		log.Printf("Unknown command %s", function)
+	default:
+		log.Warn().Str("command", function).Msg("Unknown command received")
 	}
 }
 
+// onAquareaCommand returns a handler for Aquarea-specific commands
 func onAquareaCommand(commandsChannel chan []byte) func(mclient mqtt.Client, msg mqtt.Message) {
 	return func(mclient mqtt.Client, msg mqtt.Message) {
 		topicPieces := strings.Split(msg.Topic(), "/")
 		function := topicPieces[len(topicPieces)-2]
 		value := string(msg.Payload())
-		log.Printf("Command received - set %s to %s\n", function, value)
+
+		log.Info().
+			Str("function", function).
+			Str("value", value).
+			Str("topic", msg.Topic()).
+			Msg("Aquarea command received")
 
 		command, err := prepMainCommand(function, value)
 		if err == nil {
-			commandsChannel <- command[:]
+			// Send command to the channel with timeout protection
+			select {
+			case commandsChannel <- command[:]:
+				log.Debug().
+					Str("function", function).
+					Str("value", value).
+					Msg("Command sent to channel")
+			case <-time.After(2 * time.Second):
+				log.Error().
+					Str("function", function).
+					Str("value", value).
+					Msg("Timeout sending command to channel - channel might be full")
+			}
 		} else {
-			log.Println(err)
+			log.Error().
+				Err(err).
+				Str("function", function).
+				Str("value", value).
+				Msg("Failed to prepare command")
 		}
 	}
 }
 
+// verboseToNumber converts a string value to its numeric equivalent based on the topic's defined values
 func verboseToNumber(function, value string) (int64, error) {
 	if sensor, ok := topicNameLookup[function]; ok {
 		for valueKey, valueName := range sensor.Values {
@@ -50,73 +77,89 @@ func verboseToNumber(function, value string) (int64, error) {
 			}
 		}
 	}
-	return 0, errors.New("Can't convert literal to number")
+	return 0, fmt.Errorf("cannot convert literal '%s' to number for function '%s'", value, function)
 }
 
+// prepMainCommand prepares a command byte array for the heat pump
 func prepMainCommand(function, msg string) ([setCmdLen]byte, error) {
 	command := panasonicSetCommand
+
+	// Try to parse as a number first
 	v, err := strconv.ParseInt(msg, 10, 16)
 	if err != nil {
+		// If not a number, try to convert from a named value
 		v, err = verboseToNumber(function, msg)
 		if err != nil {
-			return command, err
+			return command, fmt.Errorf("value conversion error: %w", err)
 		}
 	}
 
+	// Find the topic and encode the value
 	if sensor, ok := topicNameLookup[function]; ok {
 		if sensor.EncodeFunction != "" {
 			if handler, ok := encodeInt[sensor.EncodeFunction]; ok {
 				data := handler(int(v))
-				log.Printf("Setting offset %d to %d", sensor.DecodeOffset, data)
+
+				log.Debug().
+					Int("offset", sensor.DecodeOffset).
+					Int("value", int(data)).
+					Str("function", function).
+					Str("original", msg).
+					Msg("Setting value")
+
 				command[sensor.DecodeOffset] = data
 				return command, nil
 			}
-			return command, errors.New("Unknown command encodeFunction")
+			return command, fmt.Errorf("unknown encode function '%s' for topic '%s'", sensor.EncodeFunction, function)
 		}
-		return command, errors.New("No encode function defined for this topic")
+		return command, fmt.Errorf("no encode function defined for topic '%s'", function)
 	}
-	return command, errors.New("Unknown topic")
+	return command, fmt.Errorf("unknown topic '%s'", function)
 }
 
+// handlePCBCommand processes commands for the optional PCB
 func handlePCBCommand(function, value string) {
+	// Handle float commands
 	if handler, ok := optionCommandMapFloat[function]; ok {
 		temp, err := strconv.ParseFloat(value, 64)
 		if err != nil {
-			log.Printf("%s: %s value conversion error", function, value)
+			log.Error().
+				Err(err).
+				Str("function", function).
+				Str("value", value).
+				Msg("Value conversion error for float command")
 			return
 		}
 		handler(temp)
-	} else if handler, ok := optionCommandMapByte[function]; ok {
+		log.Debug().
+			Str("function", function).
+			Float64("value", temp).
+			Msg("PCB float command processed")
+		return
+	}
+
+	// Handle byte commands
+	if handler, ok := optionCommandMapByte[function]; ok {
 		v, err := strconv.ParseInt(value, 10, 8)
 		if err != nil {
-			log.Printf("%s: %s value conversion error", function, value)
+			log.Error().
+				Err(err).
+				Str("function", function).
+				Str("value", value).
+				Msg("Value conversion error for byte command")
 			return
 		}
 		handler(byte(v))
-	} else {
-		log.Printf("Unknown command (%s) or value conversion error (%s)", function, value)
-	}
-}
-
-func handleOSCommand(mclient mqtt.Client, msg mqtt.Message) {
-	if !Config.EnableOSCommand {
+		log.Debug().
+			Str("function", function).
+			Int64("value", v).
+			Msg("PCB byte command processed")
 		return
 	}
-	var cmd *exec.Cmd
-	var out2 string
-	s := strings.Split(string(msg.Payload()), " ")
-	if len(s) < 2 {
-		cmd = exec.Command(s[0])
-	} else {
-		cmd = exec.Command(s[0], s[1:]...)
-	}
 
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		// TODO: handle error more gracefully
-		out2 = fmt.Sprintf("%s", err)
-	}
-	comout := fmt.Sprintf("%s - %s", out, out2)
-	TOP := fmt.Sprintf("%s/out", getCommandTopic(("OSCommand")))
-	mqttPublish(mclient, TOP, comout, 0)
+	// Unknown command
+	log.Error().
+		Str("function", function).
+		Str("value", value).
+		Msg("Unknown PCB command or value conversion error")
 }
